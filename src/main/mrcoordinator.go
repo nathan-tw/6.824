@@ -20,6 +20,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	// 第一個參數是*.txt，代表切分後的文件
+	// 第二個參數則是worker數量(nReduce)
 	m := mr.MakeCoordinator(os.Args[1:], 10)
 	for m.Done() == false {
 		time.Sleep(time.Second)

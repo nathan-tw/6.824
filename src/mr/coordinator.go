@@ -1,14 +1,24 @@
 package mr
 
-import "log"
-import "net"
-import "os"
-import "net/rpc"
-import "net/http"
+import (
+	"log"
+	"net"
+	"net/http"
+	"net/rpc"
+	"os"
+	"sync"
+)
 
 
 type Coordinator struct {
-	// Your definitions here.
+	files []string
+	nReduce int
+	mapChan chan *Task
+	reduceTasks chan *Task
+	mutex sync.Mutex
+}
+
+type Task struct {
 
 }
 
@@ -60,11 +70,20 @@ func (c *Coordinator) Done() bool {
 // nReduce is the number of reduce tasks to use.
 //
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
-	c := Coordinator{}
+	c := Coordinator{
+		files: files,
+		nReduce: nReduce,
+		mapChan: make(chan *Task, len(files)),
+		reduceTasks: make(chan *Task, nReduce),
+	}
 
 	// Your code here.
 
 
 	c.server()
 	return &c
+}
+
+func (c *Coordinator) handleTask() error {
+
 }

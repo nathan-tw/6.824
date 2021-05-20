@@ -4,7 +4,7 @@
 
 ## labs
 
-- [  ] lab1 MapReduce
-- [  ] lab2 raft
-- [  ] lab3 kvraft
-- [  ] lab4 shardkv
+- [ ] lab1 MapReduce
+- [ ] lab2 raft
+- [ ] lab3 kvraft
+- [ ] lab4 shardkv

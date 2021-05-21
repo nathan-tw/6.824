@@ -15,14 +15,32 @@ type Coordinator struct {
 	nReduce int
 	mapChan chan *Task
 	reduceTasks chan *Task
-	mutex sync.Mutex
+	mutex *sync.Mutex
 }
 
-type Task struct {
 
+//
+// create a Coordinator.
+// main/mrcoordinator.go calls this function.
+// nReduce is the number of reduce tasks to use.
+//
+func MakeCoordinator(files []string, nReduce int) *Coordinator {
+	c := Coordinator{
+		files: files,
+		nReduce: nReduce,
+		mapChan: make(chan *Task, len(files)),
+		reduceTasks: make(chan *Task, nReduce),
+		mutex: &sync.Mutex{},
+	}
+	
+	c.server()
+	return &c
 }
 
 // Your code here -- RPC handlers for the worker to call.
+func (c *Coordinator) handleTaskRequest() {
+	
+}
 
 //
 // an example RPC handler.
@@ -62,28 +80,4 @@ func (c *Coordinator) Done() bool {
 
 
 	return ret
-}
-
-//
-// create a Coordinator.
-// main/mrcoordinator.go calls this function.
-// nReduce is the number of reduce tasks to use.
-//
-func MakeCoordinator(files []string, nReduce int) *Coordinator {
-	c := Coordinator{
-		files: files,
-		nReduce: nReduce,
-		mapChan: make(chan *Task, len(files)),
-		reduceTasks: make(chan *Task, nReduce),
-	}
-
-	// Your code here.
-
-
-	c.server()
-	return &c
-}
-
-func (c *Coordinator) handleTask() error {
-
 }

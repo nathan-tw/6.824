@@ -36,12 +36,47 @@ func ihash(key string) int {
 // main/mrworker.go calls this function.
 //
 func Worker(mapf func(string, string) []KeyValue, reducef func(string, []string) string) {
+	for {
+		reply := RequestTask()
+		if reply.TaskDone {
+			break
+		}
 
-	// Your worker implementation here.
+		err := do(mapf, reducef, reply.Task)
+		if err != nil {
+			return // report task fail
+		}
+		// report task success
+	}
+}
 
-	// uncomment to send the Example RPC to the coordinator.
-	CallExample()
+func do(mapf func(string, string) []KeyValue, reducef func(string, []string) string, task Task) error {
+	if task.TaskPhase == MapPhase {
+		// do map task
+	} else if task.TaskPhase == ReducePhace {
+		// do reduce task
+	} else {
+		// log.fatal("some err...")
+	}
+	return nil
+}
 
+
+
+
+func RequestTask() ReqTaskReply {
+	args := &ReqTaskArg{
+		WorkerStatus: true,
+	}
+	reply := &ReqTaskReply{}
+	if ok := call("Coordinator", args, reply); !ok {
+		log.Fatal("fail to request tast")
+	}
+	return *reply
+}
+
+func ReportTask() {
+	
 }
 
 //

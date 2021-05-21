@@ -13,6 +13,28 @@ import "strconv"
 // example to show how to declare the arguments
 // and reply for an RPC.
 //
+type Task struct {
+	TaskPhase int
+	MapNum int
+	ReduceNum int
+	TaskIndex int
+	FileName string
+	IsDone bool
+}
+
+const (
+	MapPhase = iota
+	ReducePhace
+)
+
+type ReqTaskArg struct {
+	WorkerStatus bool
+}
+
+type ReqTaskReply struct {
+	Task Task
+	TaskDone bool
+}
 
 type ExampleArgs struct {
 	X int

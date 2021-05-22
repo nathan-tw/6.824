@@ -36,6 +36,14 @@ type ReqTaskReply struct {
 	TaskDone bool
 }
 
+type ReportTaskArg struct {
+
+}
+
+type ReportTaskReply struct {
+	
+}
+
 type ExampleArgs struct {
 	X int
 }

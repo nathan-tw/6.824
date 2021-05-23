@@ -2,12 +2,14 @@ package mr
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"io/ioutil"
 	"log"
 	"net/rpc"
 	"os"
+	"sort"
 	"strconv"
 )
 
@@ -49,21 +51,24 @@ func Worker(mapf func(string, string) []KeyValue, reducef func(string, []string)
 
 		err := do(mapf, reducef, reply.Task)
 		if err != nil {
-			return // report task fail
+			reportTask(reply.Task.TaskIndex, false)
+			continue
 		}
-		// report task success
+		reportTask(reply.Task.TaskIndex, true)
 	}
 }
 
 func do(mapf func(string, string) []KeyValue, reducef func(string, []string) string, task Task) error {
 	if task.TaskPhase == MapPhase {
 		// do map task
-	} else if task.TaskPhase == ReducePhace {
+		err := doMapTask(mapf, task.FileName, task.TaskIndex, task.ReduceNum)
+		return err
+	} else if task.TaskPhase == ReducePhase {
 		// do reduce task
-	} else {
-		// log.fatal("some err...")
+		err := doReduceTask(reducef, task.MapNum, task.TaskIndex)
+		return err
 	}
-	return nil
+	return errors.New("error while requesting task")
 }
 
 func doMapTask(mapf func(string, string) []KeyValue, fileName string, mapTaskIndex int, reduceNum int) error {
@@ -97,8 +102,53 @@ func doMapTask(mapf func(string, string) []KeyValue, fileName string, mapTaskInd
 	return nil
 }
 
+
+// 處理編號1的reduceTask，需要將所有mr-x-1的檔案搜集起來排列(for x in mapNum)
+func doReduceTask(reducef func(string, []string) string, mapNum, reduceTaskIndex int) error {
+	res := make(map[string][]string)
+	for i := 0; i < mapNum; i++ {
+		intermediateFileName := getIntermediateName(i, reduceTaskIndex)
+		file, err := os.Open(intermediateFileName)
+		if err != nil {
+			return err
+		}
+		dec := json.NewDecoder(file)
+		for {
+			var kv KeyValue
+			err := dec.Decode(&kv)
+			if err != nil {
+				break
+			}
+			if _, ok := res[kv.Key]; !ok {
+				res[kv.Key] = make([]string, 0)
+			}
+			res[kv.Key] = append(res[kv.Key], kv.Value)
+		}
+		file.Close()
+	}
+	var keys []string
+	for k := range res {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	outputFileName := getOutputFileName(reduceTaskIndex)
+	fmt.Printf("產出%s\n", outputFileName)
+	outputFile, _ := os.Create(outputFileName)
+	for _, k := range keys {
+		output := reducef(k, res[k])
+		fmt.Fprintf(outputFile, "%v %v\n", k, output)
+	}
+	outputFile.Close()
+	return nil
+}
+
 func getIntermediateName(mapTaskIndex, reduceTaskIndex int) string {
 	filename := "mr" + "-" + strconv.Itoa(mapTaskIndex) + "-" + strconv.Itoa(reduceTaskIndex)
+	return filename
+}
+
+func getOutputFileName(reduceTaskIndex int) string {
+	filename := "mr-out-" + strconv.Itoa(reduceTaskIndex)
 	return filename
 }
 
@@ -107,16 +157,20 @@ func requestTask() ReqTaskReply {
 		WorkerStatus: true,
 	}
 	reply := &ReqTaskReply{}
-	if ok := call("Coordinator.HandleRequestTask", args, reply); !ok {
+	if ok := call("Coordinator.HandleTaskRequest", args, reply); !ok {
 		log.Fatal("fail to request task")
 	}
 	return *reply
 }
 
 func reportTask(taskIndex int, isDone bool) ReportTaskReply {
-	args := &ReportTaskArg{}
+	args := &ReportTaskArg{
+		IsDone: isDone,
+		TaskIndex: taskIndex,
+		WorkerStatus: true,
+	}
 	reply := &ReportTaskReply{}
-	if ok := call("Coordinator.HandleReportTask", args, reply); !ok {
+	if ok := call("Coordinator.HandleTaskReport", args, reply); !ok {
 		log.Fatal("fail to report task")
 	}
 	return *reply

@@ -24,7 +24,17 @@ type Task struct {
 
 const (
 	MapPhase = iota
-	ReducePhace
+	ReducePhase
+)
+
+type TaskStatus int
+
+const (
+	TaskStatusReady TaskStatus = iota
+	TaskStatusQueue   
+	TaskStatusRunning 
+	TaskStatusFinish
+	TaskStatusErr     
 )
 
 type ReqTaskArg struct {
@@ -37,11 +47,13 @@ type ReqTaskReply struct {
 }
 
 type ReportTaskArg struct {
-
+	WorkerStatus bool
+	TaskIndex int
+	IsDone bool
 }
 
 type ReportTaskReply struct {
-	
+	CoordinatorResponse bool
 }
 
 type ExampleArgs struct {

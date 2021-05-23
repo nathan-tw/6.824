@@ -1,21 +1,31 @@
 package mr
 
 import (
+	"errors"
 	"log"
 	"net"
 	"net/http"
 	"net/rpc"
 	"os"
 	"sync"
+	"time"
 )
 
 
+type TaskState struct {
+	Status TaskStatus
+	StartTime time.Time
+}
+
 type Coordinator struct {
-	files []string
-	nReduce int
-	mapChan chan *Task
-	reduceTasks chan *Task
-	mutex *sync.Mutex
+	TaskChan chan Task
+	Files []string
+	MapNum int
+	ReduceNum int
+	TaskPhase int
+	TaskState []TaskState
+	Mutex sync.Mutex
+	IsDone bool
 }
 
 
@@ -26,11 +36,17 @@ type Coordinator struct {
 //
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := Coordinator{
-		files: files,
-		nReduce: nReduce,
-		mapChan: make(chan *Task, len(files)),
-		reduceTasks: make(chan *Task, nReduce),
-		mutex: &sync.Mutex{},
+		Files: files,
+		MapNum: len(files),
+		IsDone: false,
+		ReduceNum: nReduce,
+		TaskPhase: MapPhase,
+		TaskState: make([]TaskState, len(files)), // TaskState[i] stands for taskIndex i's state
+		TaskChan: make(chan Task, 10),
+	}
+
+	for k := range c.TaskState {
+		c.TaskState[k].Status = TaskStatusReady
 	}
 	
 	c.server()
@@ -38,9 +54,37 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 }
 
 // Your code here -- RPC handlers for the worker to call.
-func (c *Coordinator) handleTaskRequest() {
-	
+func (c *Coordinator) HandleTaskRequest(args *ReqTaskArg, reply *ReqTaskReply) error {
+	if !args.WorkerStatus {
+		return errors.New("Worker is offline")
+	}
+	task, ok := <-c.TaskChan
+	if ok == true {
+		reply.Task = task
+		c.TaskState[task.TaskIndex].Status = TaskStatusRunning
+		c.TaskState[task.TaskIndex].StartTime = time.Now()
+	} else {
+		reply.TaskDone = true
+	}
+	return nil
 }
+
+func (c *Coordinator) HandleTaskReport(args *ReportTaskArg, reply *ReportTaskReply) error {
+	if !args.WorkerStatus {
+		reply.CoordinatorResponse = false
+		return errors.New("Worker is offline")
+	}
+	if args.IsDone == true {
+		c.TaskState[args.TaskIndex].Status = TaskStatusFinish
+	} else {
+		// 任务执行错误
+		c.TaskState[args.TaskIndex].Status = TaskStatusErr
+	}
+	reply.CoordinatorResponse = true
+	return nil
+}
+
+
 
 //
 // an example RPC handler.
@@ -76,8 +120,74 @@ func (c *Coordinator) server() {
 func (c *Coordinator) Done() bool {
 	ret := false
 
-	// Your code here.
+	finished := true
+	c.Mutex.Lock()
+	defer c.Mutex.Unlock()
+	for key, ts := range c.TaskState {
+		switch ts.Status {
+		case TaskStatusReady:
+			finished = false
+			c.addTask(key)
+		case TaskStatusQueue:
+			finished = false
+		case TaskStatusRunning:
+			finished = false
+			c.checkTask(key)
+		case TaskStatusFinish:
+		case TaskStatusErr:
+			finished = false
+			c.addTask(key)
+		default:
+			panic("Wrong task status")
+		}
+	}
+	if finished {
 
-
+		if c.TaskPhase == MapPhase {
+			c.initReduceTask()
+		} else {
+			c.IsDone = true
+			close(c.TaskChan)
+		}
+	} else {
+		c.IsDone = false
+	}
+	ret = c.IsDone
 	return ret
+}
+
+
+func (c *Coordinator) initReduceTask() {
+	c.TaskPhase = ReducePhase
+	c.IsDone = false
+	c.TaskState = make([]TaskState, c.ReduceNum)
+	for k := range c.TaskState {
+		c.TaskState[k].Status = TaskStatusReady
+	}
+}
+
+
+func (c *Coordinator) addTask(taskIndex int) {
+	c.TaskState[taskIndex].Status = TaskStatusQueue
+	task := Task{
+		FileName:  "",
+		MapNum:    len(c.Files),
+		ReduceNum: c.ReduceNum,
+		TaskIndex: taskIndex,
+		TaskPhase: c.TaskPhase,
+		IsDone:    false,
+	}
+	if c.TaskPhase == MapPhase {
+		task.FileName = c.Files[taskIndex]
+	}
+	// 放入任务队列
+	c.TaskChan <- task
+}
+
+func (c *Coordinator) checkTask(taskIndex int) {
+	timeDuration := time.Now().Sub(c.TaskState[taskIndex].StartTime)
+	if timeDuration > 10 * time.Second {
+		// re-queue the task if fail
+		c.addTask(taskIndex)
+	}
 }
